@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SmartStruct AI</title>
+    <link rel="icon" href="/static/images/logo.png">
+    <link rel="stylesheet" href="/static/css/style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="logo-area">
+
+    <img src="/static/images/logo.png" class="logo">
+
+    <h1>SmartStruct AI</h1>
+
+</div>
+
+    <p class="subtitle">
+        AI Powered Resume Parser using FastAPI + Gemini
+    </p>
+
+    <form action="/upload" method="post" enctype="multipart/form-data">
+
+        <label for="file" class="upload-box">
+
+            <div class="upload-icon">📄</div>
+
+            <h2>Drag & Drop your PDF here</h2>
+
+            <p>or click to browse</p>
+
+            <input
+                type="file"
+                id="file"
+                name="file"
+                accept=".pdf"
+                required
+                hidden>
+
+        </label>
+
+        <p id="filename">📄 No file selected</p>
+
+        <button type="submit">
+            🚀 Analyze Resume
+        </button>
+
+    </form>
+
+    {% if error %}
+
+    <div class="card">
+
+        <h2>❌ Error</h2>
+
+        <p>{{ error }}</p>
+
+    </div>
+
+    {% endif %}
+
+    {% if result %}
+
+    <div class="card">
+
+        <h2>📋 AI Analysis Result</h2>
+
+        <!-- Dashboard -->
+        <div class="dashboard">
+
+            <div class="dashboard-card">
+                <h3>📄 Resume Score</h3>
+                <h1>{{ result.ResumeScore or 0 }}/100</h1>
+            </div>
+
+            <div class="dashboard-card">
+                <h3>🎯 ATS Score</h3>
+                <h1>{{ result.ATSScore or 0 }}/100</h1>
+            </div>
+
+            <div class="dashboard-card">
+                <h3>💻 Skills</h3>
+                <h1>{{ result.Skills|length }}</h1>
+            </div>
+
+            <div class="dashboard-card">
+                <h3>📂 Projects</h3>
+                <h1>{{ result.Projects|length }}</h1>
+            </div>
+
+        </div>
+         <div class="dashboard">
+
+    <div class="dashboard-card">
+        <h2>👤</h2>
+        <h3>{{ result.Name }}</h3>
+        <p>Candidate</p>
+    </div>
+
+    <div class="dashboard-card">
+        <h2>📊</h2>
+        <h3>{{ result.ResumeScore }}/100</h3>
+        <p>Resume Score</p>
+    </div>
+
+    <div class="dashboard-card">
+        <h2>🤖</h2>
+        <h3>{{ result.ATSScore }}/100</h3>
+        <p>ATS Score</p>
+    </div>
+
+    <div class="dashboard-card">
+        <h2>💻</h2>
+        <h3>{{ result.Skills|length }}</h3>
+        <p>Skills</p>
+    </div>
+
+</div>
+        <div class="info-grid">
+
+            <!-- Personal -->
+            <div class="info-box">
+
+                <h3>👤 Personal Information</h3>
+
+                <p><strong>Name:</strong> {{ result.Name or "Not Found" }}</p>
+
+                <p><strong>Email:</strong> {{ result.Email or "Not Found" }}</p>
+
+                <p><strong>Phone:</strong> {{ result.Phone or "Not Found" }}</p>
+
+            </div>
+
+            <!-- Resume Analysis -->
+            <div class="info-box">
+
+                <h3>📊 Resume Analysis</h3>
+
+                <p><strong>Resume Score:</strong> {{ result.ResumeScore or 0 }}/100</p>
+
+                <progress value="{{ result.ResumeScore or 0 }}" max="100" style="width:100%;height:20px;"></progress>
+
+                <br><br>
+
+                <p><strong>ATS Score:</strong> {{ result.ATSScore or 0 }}/100</p>
+
+                <progress value="{{ result.ATSScore or 0 }}" max="100" style="width:100%;height:20px;"></progress>
+
+            </div>
+
+            <!-- Strengths -->
+            <div class="info-box">
+
+                <h3>✅ Strengths</h3>
+
+                <ul>
+
+                    {% if result.Strengths %}
+
+                        {% for item in result.Strengths %}
+                        <li>✔ {{ item }}</li>
+                        {% endfor %}
+
+                    {% else %}
+
+                        <li>No strengths found.</li>
+
+                    {% endif %}
+
+                </ul>
+
+            </div>
+
+            <!-- Suggestions -->
+            <div class="info-box">
+
+                <h3>💡 AI Suggestions</h3>
+
+                <ul>
+
+                    {% if result.Suggestions %}
+
+                        {% for item in result.Suggestions %}
+                        <li>💡 {{ item }}</li>
+                        {% endfor %}
+
+                    {% else %}
+
+                        <li>No suggestions available.</li>
+
+                    {% endif %}
+
+                </ul>
+
+            </div>
+
+            <!-- Skills -->
+            <div class="info-box">
+
+                <h3>💻 Skills</h3>
+
+                <ul>
+
+                    {% if result.Skills %}
+
+                        {% for skill in result.Skills %}
+                        <li>✅ {{ skill }}</li>
+                        {% endfor %}
+
+                    {% else %}
+
+                        <li>No Skills Found</li>
+
+                    {% endif %}
+
+                </ul>
+
+            </div>
+
+            <!-- Education -->
+            <div class="info-box">
+
+                <h3>🎓 Education</h3>
+
+                <ul>
+
+                    {% if result.Education %}
+
+                        {% for edu in result.Education %}
+                        <li>🎓 {{ edu }}</li>
+                        {% endfor %}
+
+                    {% else %}
+
+                        <li>No Education Found</li>
+
+                    {% endif %}
+
+                </ul>
+
+            </div>
+
+            <!-- Projects -->
+            <div class="info-box">
+
+                <h3>📂 Projects</h3>
+
+                <ul>
+
+                    {% if result.Projects %}
+
+                        {% for project in result.Projects %}
+                        <li>📂 {{ project }}</li>
+                        {% endfor %}
+
+                    {% else %}
+
+                        <li>No Projects Found</li>
+
+                    {% endif %}
+
+                </ul>
+
+            </div>
+
+            <!-- Certifications -->
+            <div class="info-box">
+
+                <h3>📜 Certifications</h3>
+
+                <ul>
+
+                    {% if result.Certifications %}
+
+                        {% for cert in result.Certifications %}
+                        <li>📜 {{ cert }}</li>
+                        {% endfor %}
+
+                    {% else %}
+
+                        <li>No Certifications Found</li>
+
+                    {% endif %}
+
+                </ul>
+
+            </div>
+
+            <!-- Languages -->
+            <div class="info-box">
+
+                <h3>🌍 Languages</h3>
+
+                <ul>
+
+                    {% if result.Languages %}
+
+                        {% for lang in result.Languages %}
+                        <li>🌍 {{ lang }}</li>
+                        {% endfor %}
+
+                    {% else %}
+
+                        <li>No Languages Found</li>
+
+                    {% endif %}
+
+                </ul>
+
+            </div>
+
+        </div>
+
+        <br>
+
+        <center>
+
+            <a href="/download-json">
+                <button type="button">
+                    ⬇ Download JSON
+                </button>
+            </a>
+
+            &nbsp;&nbsp;
+
+            <a href="/download-pdf">
+                <button type="button">
+                    📄 Download PDF Report
+                </button>
+            </a>
+
+        </center>
+
+    </div>
+
+    {% endif %}
+
+    <footer>
+
+        <hr>
+         <p>
+© 2026 SmartStruct AI
+</p>
+
+<p>
+Built using FastAPI • Gemini AI • PyMuPDF
+</p>
+        
+
+    </footer>
+
+</div>
+
+<!-- Loading Screen -->
+<div id="loading" style="display:none;">
+
+    <div class="loader"></div>
+
+    ━━━━━━━━━━━━━━━━━━
+
+📄 Uploading Resume...
+
+🧠 Extracting Text...
+
+🤖 AI Understanding Resume...
+
+📊 Calculating ATS Score...
+
+✨ Preparing Report...
+
+━━━━━━━━━━━━━━━━━━
+    <p>Please wait a few seconds...</p>
+
+</div>
+
+<script src="/static/js/script.js"></script>
+
+</body>
+
+</html>
