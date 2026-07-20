@@ -387,3 +387,6 @@ async def download_pdf():
         media_type="application/pdf",
         filename="SmartStruct_AI_Report.pdf"
     )
+@app.get("/test")
+async def test():
+    return {"message": "App is working!"}
