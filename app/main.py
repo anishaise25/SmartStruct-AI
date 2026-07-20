@@ -4,6 +4,8 @@ import shutil
 import re
 import fitz
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 from google import genai
 
@@ -16,11 +18,27 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 
 # -----------------------------
+# Base Directory
+# -----------------------------
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# -----------------------------
 # FastAPI App
 # -----------------------------
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount(
+    "/static",
+    StaticFiles(directory=BASE_DIR / "static"),
+    name="static"
+)
+
+# -----------------------------
+# Templates
+# -----------------------------
+templates = Jinja2Templates(
+    directory=str(BASE_DIR / "templates")
+)
 
 # -----------------------------
 # Load Gemini API Key
@@ -30,23 +48,18 @@ load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in .env file")
+    raise ValueError("GEMINI_API_KEY not found.")
 
 client = genai.Client(api_key=API_KEY)
 
 # -----------------------------
-# Templates
+# Project Folders
 # -----------------------------
-templates = Jinja2Templates(directory="templates")
+UPLOAD_FOLDER = BASE_DIR / "uploads"
+OUTPUT_FOLDER = BASE_DIR / "output"
 
-# -----------------------------
-# Folders
-# -----------------------------
-UPLOAD_FOLDER = "uploads"
-OUTPUT_FOLDER = "output"
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+UPLOAD_FOLDER.mkdir(exist_ok=True)
+OUTPUT_FOLDER.mkdir(exist_ok=True)
 
 # -----------------------------
 # Home Page
@@ -62,7 +75,6 @@ async def home(request: Request):
             "error": None
         }
     )
-
 # -----------------------------
 # Upload Resume
 # -----------------------------
@@ -71,12 +83,10 @@ async def upload_file(
     request: Request,
     file: UploadFile = File(...)
 ):
-
     try:
 
         # Check file selected
         if not file.filename:
-
             return templates.TemplateResponse(
                 request=request,
                 name="index.html",
@@ -86,9 +96,8 @@ async def upload_file(
                 }
             )
 
-        # Check extension
+        # Check PDF extension
         if not file.filename.lower().endswith(".pdf"):
-
             return templates.TemplateResponse(
                 request=request,
                 name="index.html",
@@ -98,12 +107,11 @@ async def upload_file(
                 }
             )
 
-        # Read file bytes
+        # Read uploaded file
         file_bytes = await file.read()
 
-        # Check size (10 MB)
+        # Max size = 10 MB
         if len(file_bytes) > 10 * 1024 * 1024:
-
             return templates.TemplateResponse(
                 request=request,
                 name="index.html",
@@ -113,20 +121,17 @@ async def upload_file(
                 }
             )
 
-        # Reset pointer
+        # Reset file pointer
         await file.seek(0)
 
-        # Save PDF
-        file_path = os.path.join(
-            UPLOAD_FOLDER,
-            file.filename
-        )
+        # Save uploaded PDF
+        file_path = UPLOAD_FOLDER / file.filename
 
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
         # Read PDF
-        pdf = fitz.open(file_path)
+        pdf = fitz.open(str(file_path))
 
         text = ""
 
@@ -136,7 +141,6 @@ async def upload_file(
         pdf.close()
 
         if text.strip() == "":
-
             return templates.TemplateResponse(
                 request=request,
                 name="index.html",
@@ -146,12 +150,13 @@ async def upload_file(
                 }
             )
 
+        # Gemini Prompt
         prompt = f"""
 You are an expert AI Resume Analyzer.
 
-Extract resume details.
+Analyze the following resume and return ONLY valid JSON.
 
-Return ONLY valid JSON.
+Schema:
 
 {{
   "Name":"",
@@ -173,6 +178,7 @@ Resume:
 {text}
 """
 
+        # Gemini Response
         response = client.models.generate_content(
             model="models/gemini-3.5-flash",
             contents=prompt
@@ -180,22 +186,23 @@ Resume:
 
         result_text = response.text.strip()
 
+        # Remove markdown if present
         result_text = re.sub(
             r"```json|```",
             "",
             result_text
         ).strip()
 
+        # Convert JSON
         try:
-
             result = json.loads(result_text)
 
-        except:
+        except Exception:
 
             result = {
-                "Name": None,
-                "Email": None,
-                "Phone": None,
+                "Name": "",
+                "Email": "",
+                "Phone": "",
                 "Skills": [],
                 "Education": [],
                 "Projects": [],
@@ -207,13 +214,10 @@ Resume:
                 "Suggestions": []
             }
 
-        json_path = os.path.join(
-            OUTPUT_FOLDER,
-            "resume_data.json"
-        )
+        # Save JSON
+        json_path = OUTPUT_FOLDER / "resume_data.json"
 
         with open(json_path, "w", encoding="utf-8") as f:
-
             json.dump(
                 result,
                 f,
@@ -240,42 +244,34 @@ Resume:
                 "error": str(e)
             }
         )
-# -----------------------------
+    # -----------------------------
 # Download JSON
 # -----------------------------
 @app.get("/download-json")
 async def download_json():
 
-    json_path = os.path.join(
-        OUTPUT_FOLDER,
-        "resume_data.json"
-    )
+    json_path = OUTPUT_FOLDER / "resume_data.json"
 
-    if not os.path.exists(json_path):
+    if not json_path.exists():
 
         return {
             "message": "No resume data found."
         }
 
     return FileResponse(
-        path=json_path,
+        path=str(json_path),
         media_type="application/json",
         filename="resume_data.json"
     )
-
-
 # -----------------------------
 # Download PDF Report
 # -----------------------------
 @app.get("/download-pdf")
 async def download_pdf():
 
-    json_path = os.path.join(
-        OUTPUT_FOLDER,
-        "resume_data.json"
-    )
+    json_path = OUTPUT_FOLDER / "resume_data.json"
 
-    if not os.path.exists(json_path):
+    if not json_path.exists():
 
         return {
             "message": "Resume data not found."
@@ -284,20 +280,15 @@ async def download_pdf():
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    pdf_path = os.path.join(
-        OUTPUT_FOLDER,
-        "resume_report.pdf"
-    )
+    pdf_path = OUTPUT_FOLDER / "resume_report.pdf"
 
-    doc = SimpleDocTemplate(pdf_path)
+    doc = SimpleDocTemplate(str(pdf_path))
 
     styles = getSampleStyleSheet()
 
     story = []
 
-    # -----------------------------
     # Title
-    # -----------------------------
     story.append(
         Paragraph(
             "<b>SmartStruct AI Resume Report</b>",
@@ -307,9 +298,7 @@ async def download_pdf():
 
     story.append(Paragraph("<br/>", styles["Normal"]))
 
-    # -----------------------------
-    # Personal Details
-    # -----------------------------
+    # Personal Information
     story.append(
         Paragraph(
             f"<b>Name:</b> {data.get('Name','N/A')}",
@@ -333,189 +322,68 @@ async def download_pdf():
 
     story.append(Paragraph("<br/>", styles["Normal"]))
 
-    # -----------------------------
     # Resume Score
-    # -----------------------------
     story.append(
         Paragraph(
-            "<b>Resume Score</b>",
+            f"<b>Resume Score:</b> {data.get('ResumeScore',0)}/100",
             styles["Heading2"]
         )
     )
 
     story.append(
         Paragraph(
-            f"{data.get('ResumeScore',0)}/100",
-            styles["Normal"]
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "<b>ATS Score</b>",
+            f"<b>ATS Score:</b> {data.get('ATSScore',0)}/100",
             styles["Heading2"]
-        )
-    )
-
-    story.append(
-        Paragraph(
-            f"{data.get('ATSScore',0)}/100",
-            styles["Normal"]
         )
     )
 
     story.append(Paragraph("<br/>", styles["Normal"]))
 
-    # -----------------------------
-    # Skills
-    # -----------------------------
-    story.append(
-        Paragraph(
-            "<b>Skills</b>",
-            styles["Heading2"]
-        )
-    )
-
-    for skill in data.get("Skills", []):
+    # Helper Function
+    def add_section(title, items):
 
         story.append(
             Paragraph(
-                f"• {skill}",
-                styles["Normal"]
+                f"<b>{title}</b>",
+                styles["Heading2"]
             )
         )
 
-    story.append(Paragraph("<br/>", styles["Normal"]))
+        if items:
 
-    # -----------------------------
-    # Education
-    # -----------------------------
-    story.append(
-        Paragraph(
-            "<b>Education</b>",
-            styles["Heading2"]
-        )
-    )
+            for item in items:
+                story.append(
+                    Paragraph(
+                        f"• {item}",
+                        styles["Normal"]
+                    )
+                )
 
-    for edu in data.get("Education", []):
+        else:
+
+            story.append(
+                Paragraph(
+                    "No Data",
+                    styles["Normal"]
+                )
+            )
 
         story.append(
-            Paragraph(
-                f"• {edu}",
-                styles["Normal"]
-            )
+            Paragraph("<br/>", styles["Normal"])
         )
 
-    story.append(Paragraph("<br/>", styles["Normal"]))
+    add_section("Skills", data.get("Skills", []))
+    add_section("Education", data.get("Education", []))
+    add_section("Projects", data.get("Projects", []))
+    add_section("Certifications", data.get("Certifications", []))
+    add_section("Languages", data.get("Languages", []))
+    add_section("Strengths", data.get("Strengths", []))
+    add_section("Suggestions", data.get("Suggestions", []))
 
-    # -----------------------------
-    # Projects
-    # -----------------------------
-    story.append(
-        Paragraph(
-            "<b>Projects</b>",
-            styles["Heading2"]
-        )
-    )
-
-    for project in data.get("Projects", []):
-
-        story.append(
-            Paragraph(
-                f"• {project}",
-                styles["Normal"]
-            )
-        )
-
-    story.append(Paragraph("<br/>", styles["Normal"]))
-
-    # -----------------------------
-    # Certifications
-    # -----------------------------
-    story.append(
-        Paragraph(
-            "<b>Certifications</b>",
-            styles["Heading2"]
-        )
-    )
-
-    for cert in data.get("Certifications", []):
-
-        story.append(
-            Paragraph(
-                f"• {cert}",
-                styles["Normal"]
-            )
-        )
-
-    story.append(Paragraph("<br/>", styles["Normal"]))
-
-    # -----------------------------
-    # Languages
-    # -----------------------------
-    story.append(
-        Paragraph(
-            "<b>Languages</b>",
-            styles["Heading2"]
-        )
-    )
-
-    for lang in data.get("Languages", []):
-
-        story.append(
-            Paragraph(
-                f"• {lang}",
-                styles["Normal"]
-            )
-        )
-
-    story.append(Paragraph("<br/>", styles["Normal"]))
-
-    # -----------------------------
-    # Strengths
-    # -----------------------------
-    story.append(
-        Paragraph(
-            "<b>Strengths</b>",
-            styles["Heading2"]
-        )
-    )
-
-    for item in data.get("Strengths", []):
-
-        story.append(
-            Paragraph(
-                f"• {item}",
-                styles["Normal"]
-            )
-        )
-
-    story.append(Paragraph("<br/>", styles["Normal"]))
-
-    # -----------------------------
-    # Suggestions
-    # -----------------------------
-    story.append(
-        Paragraph(
-            "<b>Suggestions</b>",
-            styles["Heading2"]
-        )
-    )
-
-    for item in data.get("Suggestions", []):
-
-        story.append(
-            Paragraph(
-                f"• {item}",
-                styles["Normal"]
-            )
-        )
-
-    # Generate PDF
     doc.build(story)
 
     return FileResponse(
-        pdf_path,
+        path=str(pdf_path),
         media_type="application/pdf",
         filename="SmartStruct_AI_Report.pdf"
     )
